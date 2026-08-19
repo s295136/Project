@@ -1,0 +1,986 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>產品定位專案時程管制甘特圖 (支援自訂基準日)</title>
+  <style>
+    :root {
+      --bg-primary: #f8fafc;
+      --bg-card: #ffffff;
+      --border-color: #e2e8f0;
+      --text-main: #1e293b;
+      --text-muted: #64748b;
+      --primary: #2563eb;
+      
+      /* 單位代表色 */
+      --color-design: #0284c7;    /* 設計專案: 湛藍 */
+      --color-land: #d97706;      /* 土開: 琥珀橘 */
+      --color-marketing: #e11d48; /* 行銷/企劃: 玫瑰紅 */
+      --color-service: #16a34a;   /* 客服: 翠綠 */
+      --color-bim: #9333ea;       /* 顧問群(BIM): 紫色 */
+      --color-architect: #0d9488; /* 建築師: 藍綠/青色 */
+      --color-structure: #4f46e5; /* 結構技師: 靛青 */
+      --color-mep: #ea580c;       /* 機電技師: 橙紅 */
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans TC", sans-serif;
+      background-color: var(--bg-primary);
+      color: var(--text-main);
+      padding: 24px;
+      line-height: 1.5;
+    }
+
+    .container { max-width: 1680px; margin: 0 auto; }
+
+    .header {
+      background: var(--bg-card);
+      padding: 22px 30px;
+      border-radius: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      border: 1px solid var(--border-color);
+      margin-bottom: 20px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .header-title h1 {
+      font-size: 22px;
+      font-weight: 700;
+      color: #0f172a;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .header-title p {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .header-controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+    }
+
+    /* 日期設定器樣式 */
+    .date-picker-box {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #f8fafc;
+      padding: 5px 12px;
+      border-radius: 8px;
+      border: 1px solid #cbd5e1;
+    }
+
+    .date-picker-box label {
+      font-size: 13px;
+      font-weight: 700;
+      color: #1e293b;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .date-input {
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: 13px;
+      font-weight: 500;
+      color: #0f172a;
+      background: #ffffff;
+      outline: none;
+      cursor: pointer;
+    }
+
+    .date-input:focus {
+      border-color: #2563eb;
+      box-shadow: 0 0 0 2px rgba(37,99,235,0.15);
+    }
+
+    .btn-clear-date {
+      background: transparent;
+      border: none;
+      font-size: 12px;
+      color: #64748b;
+      cursor: pointer;
+      padding: 2px 6px;
+      border-radius: 4px;
+      text-decoration: underline;
+    }
+
+    .btn-clear-date:hover {
+      color: #ef4444;
+    }
+
+    .sync-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #f0fdf4;
+      color: #15803d;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 6px 14px;
+      border-radius: 20px;
+      border: 1px solid #bbf7d0;
+    }
+
+    .sync-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #22c55e;
+      display: inline-block;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(1.2); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+
+    .btn-reload {
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #334155;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+
+    .btn-reload:hover {
+      background: #f1f5f9;
+      color: #0f172a;
+    }
+
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .stat-card {
+      background: var(--bg-card);
+      padding: 16px 20px;
+      border-radius: 10px;
+      border: 1px solid var(--border-color);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+    }
+
+    .stat-card .label { font-size: 12px; color: var(--text-muted); font-weight: 500; }
+    .stat-card .value { font-size: 20px; font-weight: 700; color: #0f172a; margin-top: 4px; }
+
+    .control-panel {
+      background: var(--bg-card);
+      padding: 16px 24px;
+      border-radius: 12px;
+      border: 1px solid var(--border-color);
+      margin-bottom: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .filter-group {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .filter-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-right: 4px;
+    }
+
+    .filter-btn {
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-main);
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .filter-btn:hover { background: #e2e8f0; }
+    .filter-btn.active { background: #1e293b; color: #ffffff; border-color: #1e293b; }
+
+    .legend-indicator { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
+    .gantt-wrapper {
+      background: var(--bg-card);
+      border-radius: 12px;
+      border: 1px solid var(--border-color);
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+      overflow: hidden;
+      position: relative;
+      min-height: 300px;
+    }
+
+    .gantt-scroll-container { overflow-x: auto; max-width: 100%; }
+
+    .gantt-table { width: 100%; border-collapse: collapse; min-width: 1450px; }
+
+    .gantt-header-row th {
+      background: #f8fafc;
+      padding: 12px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #475569;
+      border-bottom: 2px solid var(--border-color);
+      border-right: 1px solid var(--border-color);
+      text-align: left;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .col-id { width: 55px; text-align: center !important; }
+    .col-task { width: 280px; }
+    .col-owner { width: 110px; }
+    .col-deliverable { width: 260px; }
+    .col-timeline { width: 780px; }
+
+    .timeline-ruler {
+      position: relative;
+      height: 34px;
+      background: #f1f5f9;
+      border-bottom: 1px solid var(--border-color);
+      font-size: 11px;
+      color: #475569;
+      font-weight: 600;
+    }
+
+    .ruler-mark {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      white-space: nowrap;
+    }
+
+    .ruler-mark::after {
+      content: "";
+      position: absolute;
+      bottom: 0;
+      width: 1px;
+      height: 6px;
+      background: #94a3b8;
+    }
+
+    .section-header-row td {
+      background: #f1f5f9;
+      padding: 8px 16px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #334155;
+      border-top: 1px solid #cbd5e1;
+      border-bottom: 1px solid #cbd5e1;
+      letter-spacing: 0.5px;
+    }
+
+    .gantt-row { transition: background-color 0.15s ease; }
+    .gantt-row:hover { background-color: #f8fafc; }
+    .gantt-row td {
+      padding: 10px 14px;
+      font-size: 12px;
+      border-bottom: 1px solid #f1f5f9;
+      border-right: 1px solid var(--border-color);
+      vertical-align: middle;
+    }
+
+    .task-id-badge {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 700;
+      font-size: 11px;
+      background: #e2e8f0;
+      color: #334155;
+    }
+
+    .task-title { font-weight: 600; color: #1e293b; }
+    .milestone-row { background-color: #fafaf9; }
+    .milestone-row .task-title { color: #0f172a; font-weight: 700; }
+
+    .owner-tag {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .deliverable-text { color: #334155; font-size: 12px; line-height: 1.4; }
+
+    .timeline-track {
+      position: relative;
+      height: 34px;
+      width: 100%;
+      background: repeating-linear-gradient(
+        to right,
+        transparent 0%,
+        transparent calc((100% / 14) - 1px),
+        #f1f5f9 calc((100% / 14) - 1px),
+        #f1f5f9 calc(100% / 14)
+      );
+    }
+
+    .task-bar {
+      position: absolute;
+      top: 7px;
+      height: 20px;
+      border-radius: 4px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+      display: flex;
+      align-items: center;
+      padding: 0 8px;
+      color: #ffffff;
+      font-size: 11px;
+      font-weight: 600;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: transform 0.1s ease, filter 0.15s ease;
+      z-index: 2;
+    }
+
+    .task-bar:hover { transform: scaleY(1.15); filter: brightness(1.08); z-index: 5; }
+
+    .milestone-marker {
+      position: absolute;
+      top: 6px;
+      width: 22px;
+      height: 22px;
+      transform: translateX(-50%) rotate(45deg);
+      border-radius: 3px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.18);
+      cursor: pointer;
+      transition: transform 0.15s ease;
+      z-index: 3;
+    }
+
+    .milestone-marker:hover { transform: translateX(-50%) rotate(45deg) scale(1.25); z-index: 6; }
+
+    .milestone-label {
+      position: absolute;
+      top: 8px;
+      font-size: 11px;
+      font-weight: 700;
+      white-space: nowrap;
+      pointer-events: none;
+      z-index: 4;
+    }
+
+    /* 單位樣式表 */
+    .owner-design { background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
+    .bar-design { background: #0284c7; }
+    .owner-land { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
+    .bar-land { background: #d97706; }
+    .owner-marketing { background: #ffe4e6; color: #be123c; border: 1px solid #fecdd3; }
+    .bar-marketing { background: #e11d48; }
+    .owner-service { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+    .bar-service { background: #16a34a; }
+    .owner-bim { background: #f3e8ff; color: #7e22ce; border: 1px solid #e9d5ff; }
+    .bar-bim { background: #9333ea; }
+    .owner-architect { background: #ccfbf1; color: #0f766e; border: 1px solid #99f6e4; }
+    .bar-architect { background: #0d9488; }
+    .owner-structure { background: #e0e7ff; color: #4338ca; border: 1px solid #c7d2fe; }
+    .bar-structure { background: #4f46e5; }
+    .owner-mep { background: #ffedd5; color: #c2410c; border: 1px solid #fed7aa; }
+    .bar-mep { background: #ea580c; }
+    .owner-default { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
+    .bar-default { background: #64748b; }
+
+    #loading-overlay {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(255,255,255,0.9);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+      gap: 12px;
+      font-size: 14px;
+      font-weight: 600;
+      color: #334155;
+    }
+
+    .spinner {
+      width: 36px; height: 36px;
+      border: 3px solid #e2e8f0;
+      border-top: 3px solid #2563eb;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+    #tooltip {
+      position: fixed;
+      background: rgba(15, 23, 42, 0.95);
+      backdrop-filter: blur(4px);
+      color: #ffffff;
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-size: 12px;
+      line-height: 1.5;
+      box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3);
+      pointer-events: none;
+      z-index: 1000;
+      display: none;
+      max-width: 320px;
+      border: 1px solid #334155;
+    }
+
+    #tooltip .tt-title {
+      font-weight: 700;
+      font-size: 13px;
+      color: #60a5fa;
+      margin-bottom: 6px;
+      border-bottom: 1px solid #334155;
+      padding-bottom: 4px;
+    }
+
+    #tooltip .tt-row { margin-bottom: 3px; }
+    #tooltip .tt-label { color: #94a3b8; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <div class="header">
+    <div class="header-title">
+      <h1>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+          <line x1="16" y1="2" x2="16" y2="6"></line>
+          <line x1="8" y1="2" x2="8" y2="6"></line>
+          <line x1="3" y1="10" x2="21" y2="10"></line>
+        </svg>
+        建案開發產品定位專案時程管制甘特圖
+      </h1>
+      <p id="header-subtitle">專案時程基準：D+0 至 D+98 全週期里程碑與單一成果交付清單管制</p>
+    </div>
+
+    <div class="header-controls">
+      <!-- 專案基準日設定器 -->
+      <div class="date-picker-box">
+        <label for="base-date-input">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          起始基準日 "D" Day：
+        </label>
+        <input type="date" id="base-date-input" class="date-input" title="設定專案起始日 D+0">
+        <button class="btn-clear-date" onclick="clearBaseDate()" title="清除日期，恢復為純相對日 D 顯示">清除 (恢復D日)</button>
+      </div>
+
+      <div class="sync-badge" id="sync-badge-container">
+        <span class="sync-dot"></span>
+        <span id="sync-status-label">離線/雲端混合模式</span>
+      </div>
+      <button class="btn-reload" onclick="loadDataFromSheets(true)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+        同步最新資料
+      </button>
+    </div>
+  </div>
+
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="label">目前管制項目</div>
+      <div class="value" id="stat-total-rows">51 項</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">關鍵審查會議</div>
+      <div class="value" style="color: #ea580c;" id="stat-total-milestones">13 次</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">主要交付表單/成果</div>
+      <div class="value" style="color: #0284c7;" id="stat-total-deliverables">51 份</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">專案時程模式</div>
+      <div class="value" style="color: #16a34a; font-size: 15px; margin-top: 6px;" id="stat-date-mode">相對日模式 (D+X)</div>
+    </div>
+  </div>
+
+  <div class="control-panel">
+    <div class="filter-group" id="filter-container">
+      <span class="filter-label">負責單位篩選：</span>
+      <button class="filter-btn active" data-owner="all">全部單位</button>
+    </div>
+  </div>
+
+  <div class="gantt-wrapper">
+    <div id="loading-overlay">
+      <div class="spinner"></div>
+      <div id="loading-text">正在向 Google Sheets 請求最新資料...</div>
+    </div>
+
+    <div class="gantt-scroll-container">
+      <table class="gantt-table">
+        <thead>
+          <tr class="gantt-header-row">
+            <th class="col-id">代碼</th>
+            <th class="col-task">管制節點 / 任務名稱</th>
+            <th class="col-owner">負責單位</th>
+            <th class="col-deliverable">交付成果 / 應用表單</th>
+            <th class="col-timeline" id="timeline-header-title">
+              時程軸 (相對日 D+0 ~ D+98)
+              <div class="timeline-ruler" id="ruler-container"></div>
+            </th>
+          </tr>
+        </thead>
+        <tbody id="gantt-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div id="tooltip">
+  <div class="tt-title" id="tt-title"></div>
+  <div class="tt-row"><span class="tt-label">所屬階段：</span><span id="tt-section"></span></div>
+  <div class="tt-row"><span class="tt-label">負責單位：</span><span id="tt-owner"></span></div>
+  <div class="tt-row"><span class="tt-label">時程期間：</span><span id="tt-period"></span></div>
+  <div class="tt-row"><span class="tt-label">前置相依：</span><span id="tt-deps"></span></div>
+  <div class="tt-row" style="margin-top: 6px; padding-top: 4px; border-top: 1px dashed #475569;">
+    <span class="tt-label">交付表單/成果：</span><br>
+    <span id="tt-deliverable" style="color: #38bdf8; font-weight: 500;"></span>
+  </div>
+</div>
+
+<script>
+// 1. 內建完整離線基礎資料
+const fallbackData = [
+  { id: "T01", name: "00. 設計專案說明會", section: "階段 1：專案啟動與設計條件", owner: "設計專案", start: 0, end: 0, duration: 0, type: "milestone", deps: "-", deliverable: "全程營運列控表" },
+  { id: "T01", name: "00. 設計專案說明會", section: "階段 1：專案啟動與設計條件", owner: "土開", start: 0, end: 0, duration: 0, type: "milestone", deps: "-", deliverable: "面積法規分析表" },
+  { id: "T01", name: "00. 設計專案說明會", section: "階段 1：專案啟動與設計條件", owner: "土開", start: 0, end: 0, duration: 0, type: "milestone", deps: "-", deliverable: "建材設備表" },
+  { id: "T02", name: "市場總經、客層策略與競品分析", section: "階段 2：市場定位與營運審查", owner: "行銷/企劃", start: 0, end: 7, duration: 7, type: "task", deps: "T01", deliverable: "區域行情表" },
+  { id: "T02", name: "市場總經、客層策略與競品分析", section: "階段 2：市場定位與營運審查", owner: "行銷/企劃", start: 0, end: 7, duration: 7, type: "task", deps: "T01", deliverable: "競品個案總表" },
+  { id: "T02", name: "市場總經、客層策略與競品分析", section: "階段 2：市場定位與營運審查", owner: "行銷/企劃", start: 0, end: 7, duration: 7, type: "task", deps: "T01", deliverable: "房坪統計表" },
+  { id: "T02", name: "市場總經、客層策略與競品分析", section: "階段 2：市場定位與營運審查", owner: "行銷/企劃", start: 0, end: 7, duration: 7, type: "task", deps: "T01", deliverable: "建材設備表" },
+  { id: "T03", name: "物管編制、維運回饋與管理費核算", section: "階段 2：市場定位與營運審查", owner: "客服", start: 0, end: 7, duration: 7, type: "task", deps: "T01", deliverable: "物管營運預算表" },
+  { id: "T03", name: "物管編制、維運回饋與管理費核算", section: "階段 2：市場定位與營運審查", owner: "客服", start: 0, end: 7, duration: 7, type: "task", deps: "T01", deliverable: "管理費核算表" },
+  { id: "T04", name: "01. 跨部門聯合會議 (市場與營運)", section: "階段 2：市場定位與營運審查", owner: "行銷/企劃", start: 7, end: 7, duration: 0, type: "milestone", deps: "T02, T03", deliverable: "市場客層定位報告" },
+  { id: "T04", name: "01. 跨部門聯合會議 (市場與營運)", section: "階段 2：市場定位與營運審查", owner: "客服", start: 7, end: 7, duration: 0, type: "milestone", deps: "T02, T03", deliverable: "營運物管預算確認" },
+  { id: "T05", name: "量體剛性指標檢討與微氣候模擬", section: "階段 3：規劃設計與工程深化", owner: "設計專案", start: 7, end: 14, duration: 7, type: "task", deps: "T04", deliverable: "設計剛性需求表" },
+  { id: "T05", name: "量體剛性指標檢討與微氣候模擬", section: "階段 3：規劃設計與工程深化", owner: "顧問群(BIM)", start: 7, end: 14, duration: 7, type: "task", deps: "T04", deliverable: "微氣候日照風場模擬報告" },
+  { id: "T06", name: "造價成本設定與敏感度差異分析", section: "階段 3：規劃設計與工程深化", owner: "設計專案", start: 7, end: 14, duration: 7, type: "task", deps: "T04", deliverable: "單坪造價分級區間表" },
+  { id: "T06", name: "造價成本設定與敏感度差異分析", section: "階段 3：規劃設計與工程深化", owner: "設計專案", start: 7, end: 14, duration: 7, type: "task", deps: "T04", deliverable: "工項成本設定表" },
+  { id: "T06", name: "造價成本設定與敏感度差異分析", section: "階段 3：規劃設計與工程深化", owner: "設計專案", start: 7, end: 14, duration: 7, type: "task", deps: "T04", deliverable: "敏感度分析表" },
+  { id: "T07", name: "02. 建築設計 (第一次)", section: "階段 3：規劃設計與工程深化", owner: "設計專案", start: 14, end: 14, duration: 0, type: "milestone", deps: "T05, T06", deliverable: "剛性需求及造價分級確認" },
+  { id: "T08", name: "基地法規分析與量體規模方案模擬", section: "階段 3：規劃設計與工程深化", owner: "建築師", start: 14, end: 28, duration: 14, type: "task", deps: "T07", deliverable: "配置方案與量體分析" },
+  { id: "T08", name: "基地法規分析與量體規模方案模擬", section: "階段 3：規劃設計與工程深化", owner: "建築師", start: 14, end: 28, duration: 14, type: "task", deps: "T07", deliverable: "房坪配比表" },
+  { id: "T08", name: "基地法規分析與量體規模方案模擬", section: "階段 3：規劃設計與工程深化", owner: "建築師", start: 14, end: 28, duration: 14, type: "task", deps: "T07", deliverable: "平面設計標準表" },
+  { id: "T09", name: "03. 建築設計 (第二次)", section: "階段 3：規劃設計與工程深化", owner: "建築師", start: 28, end: 28, duration: 0, type: "milestone", deps: "T08", deliverable: "初版標準層平面圖" },
+  { id: "T09", name: "03. 建築設計 (第二次)", section: "階段 3：規劃設計與工程深化", owner: "建築師", start: 28, end: 28, duration: 0, type: "milestone", deps: "T08", deliverable: "初版地下室平面圖" },
+  { id: "T10", name: "地質分析、結構框架與耐震標章檢討", section: "階段 3：規劃設計與工程深化", owner: "結構技師", start: 28, end: 35, duration: 7, type: "task", deps: "T09", deliverable: "結構系統概要說明書" },
+  { id: "T10", name: "地質分析、結構框架與耐震標章檢討", section: "階段 3：規劃設計與工程深化", owner: "結構技師", start: 28, end: 35, duration: 7, type: "task", deps: "T09", deliverable: "耐震評估報告" },
+  { id: "T11", name: "04. 結構工程設計", section: "階段 3：規劃設計與工程深化", owner: "結構技師", start: 35, end: 35, duration: 0, type: "milestone", deps: "T10", deliverable: "結構系統與材料強度定案" },
+  { id: "T12", name: "系統架構規劃與五大管線/障礙物遷移套繪", section: "階段 3：規劃設計與工程深化", owner: "機電技師", start: 28, end: 42, duration: 14, type: "task", deps: "T09", deliverable: "機電系統升位圖" },
+  { id: "T12", name: "系統架構規劃與五大管線/障礙物遷移套繪", section: "階段 3：規劃設計與工程深化", owner: "機電技師", start: 28, end: 42, duration: 14, type: "task", deps: "T09", deliverable: "五大管線現況調查套繪圖" },
+  { id: "T13", name: "05. 機電工程設計 (第一次)", section: "階段 3：規劃設計與工程深化", owner: "機電技師", start: 42, end: 42, duration: 0, type: "milestone", deps: "T12", deliverable: "機電系統架構定案" },
+  { id: "T14", name: "單元戶房型傢配優化與公設動線配置", section: "階段 3：規劃設計與工程深化", owner: "建築師", start: 28, end: 49, duration: 21, type: "task", deps: "T09, T04", deliverable: "深化房型傢配圖" },
+  { id: "T14", name: "單元戶房型傢配優化與公設動線配置", section: "階段 3：規劃設計與工程深化", owner: "建築師", start: 28, end: 49, duration: 21, type: "task", deps: "T09, T04", deliverable: "地下室第二門廳動線圖" },
+  { id: "T15", name: "06. 建築設計 (第三次)", section: "階段 3：規劃設計與工程深化", owner: "建築師", start: 49, end: 49, duration: 0, type: "milestone", deps: "T14", deliverable: "單元戶格局及小公動線定案" },
+  { id: "T16", name: "機房空間型化、幹管高程與穿樑開孔檢討", section: "階段 3：規劃設計與工程深化", owner: "機電技師", start: 42, end: 56, duration: 14, type: "task", deps: "T13, T11", deliverable: "機電空間需求表" },
+  { id: "T16", name: "機房空間型化、幹管高程與穿樑開孔檢討", section: "階段 3：規劃設計與工程深化", owner: "機電技師", start: 42, end: 56, duration: 14, type: "task", deps: "T13, T11", deliverable: "穿樑套管圖" },
+  { id: "T16", name: "機房空間型化、幹管高程與穿樑開孔檢討", section: "階段 3：規劃設計與工程深化", owner: "機電技師", start: 42, end: 56, duration: 14, type: "task", deps: "T13, T11", deliverable: "機電工程規劃檢核表" },
+  { id: "T17", name: "07. 機電工程設計 (第二次)", section: "階段 3：規劃設計與工程深化", owner: "機電技師", start: 56, end: 56, duration: 0, type: "milestone", deps: "T16", deliverable: "管道間尺度與穿樑預留確認" },
+  { id: "T18", name: "公設建材選用與建築裝修粉刷規格定案", section: "階段 3：規劃設計與工程深化", owner: "建築師", start: 49, end: 63, duration: 14, type: "task", deps: "T15", deliverable: "公設建材設備表" },
+  { id: "T18", name: "公設建材選用與建築裝修粉刷規格定案", section: "階段 3：規劃設計與工程深化", owner: "建築師", start: 49, end: 63, duration: 14, type: "task", deps: "T15", deliverable: "建築裝修粉刷表" },
+  { id: "T19", name: "08. 建築設計 (第四次)", section: "階段 3：規劃設計與工程深化", owner: "建築師", start: 63, end: 63, duration: 0, type: "milestone", deps: "T18", deliverable: "建材與裝修規格定案" },
+  { id: "T20", name: "開圖計畫、單坪造價標準與設備規格清單", section: "階段 3：規劃設計與工程深化", owner: "機電技師", start: 56, end: 70, duration: 14, type: "task", deps: "T17", deliverable: "標配選配廠牌規格表" },
+  { id: "T20", name: "開圖計畫、單坪造價標準與設備規格清單", section: "階段 3：規劃設計與工程深化", owner: "機電技師", start: 56, end: 70, duration: 14, type: "task", deps: "T17", deliverable: "機電造價分析表" },
+  { id: "T21", name: "09. 機電工程設計 (第三次)", section: "階段 3：規劃設計與工程深化", owner: "機電技師", start: 70, end: 70, duration: 0, type: "milestone", deps: "T20", deliverable: "機電設備規格與出圖計畫確認" },
+  { id: "T22", name: "立面主題風格、燈光計畫、景觀與指標系統", section: "階段 3：規劃設計與工程深化", owner: "建築師", start: 63, end: 77, duration: 14, type: "task", deps: "T19", deliverable: "個案主題風格定位表" },
+  { id: "T22", name: "立面主題風格、燈光計畫、景觀與指標系統", section: "階段 3：規劃設計與工程深化", owner: "建築師", start: 63, end: 77, duration: 14, type: "task", deps: "T19", deliverable: "公設項目設定表" },
+  { id: "T22", name: "立面主題風格、燈光計畫、景觀與指標系統", section: "階段 3：規劃設計與工程深化", owner: "建築師", start: 63, end: 77, duration: 14, type: "task", deps: "T19", deliverable: "完成面淨高彩色圖" },
+  { id: "T23", name: "10. 建築設計 (第五次)", section: "階段 3：規劃設計與工程深化", owner: "建築師", start: 77, end: 77, duration: 0, type: "milestone", deps: "T22", deliverable: "外觀立面與公設/景觀美學定案" },
+  { id: "T24", name: "智慧建築、綠建築評估與弱電安控整合", section: "階段 3：規劃設計與工程深化", owner: "機電技師", start: 70, end: 84, duration: 14, type: "task", deps: "T21", deliverable: "智慧綠建築評估檢核表" },
+  { id: "T24", name: "智慧建築、綠建築評估與弱電安控整合", section: "階段 3：規劃設計與工程深化", owner: "機電技師", start: 70, end: 84, duration: 14, type: "task", deps: "T21", deliverable: "弱電監控系統架構圖" },
+  { id: "T25", name: "11. 機電工程設計 (第四次)", section: "階段 3：規劃設計與工程深化", owner: "機電技師", start: 84, end: 84, duration: 0, type: "milestone", deps: "T24", deliverable: "智慧建築/綠建築評估確認" },
+  { id: "T26", name: "全案產品定位結論、造價與總銷選用表收斂", section: "階段 4：定位結論與總結收斂", owner: "設計專案", start: 84, end: 98, duration: 14, type: "task", deps: "T23, T25", deliverable: "產品定位結論總表" },
+  { id: "T26", name: "全案產品定位結論、造價與總銷選用表收斂", section: "階段 4：定位結論與總結收斂", owner: "設計專案", start: 84, end: 98, duration: 14, type: "task", deps: "T23, T25", deliverable: "創造總銷選用表" },
+  { id: "T27", name: "12. 建築設計 (第六次 / 定位結論綜合會議)", section: "階段 4：定位結論與總結收斂", owner: "設計專案", start: 98, end: 98, duration: 0, type: "milestone", deps: "T26", deliverable: "全案產品定位報告定案與後續請照移交" }
+];
+
+const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTquwEKsenrjJNqWkqjIYxjQA-37xqwG6jdhWU76_nqUOh9ejn_WKrbdpJNIq8VUTpOZ07LoFG4EFN_/pub?output=csv";
+
+let globalGanttData = [...fallbackData];
+let currentOwnerFilter = "all";
+let baseDate = null; // 基準日物件，若為 null 則代表以純 D+X 呈現
+const TOTAL_DAYS = 98;
+
+const ownerClassMap = {
+  "設計專案": { tag: "owner-design", bar: "bar-design", hex: "#0284c7" },
+  "土開": { tag: "owner-land", bar: "bar-land", hex: "#d97706" },
+  "行銷/企劃": { tag: "owner-marketing", bar: "bar-marketing", hex: "#e11d48" },
+  "客服": { tag: "owner-service", bar: "bar-service", hex: "#16a34a" },
+  "顧問群(BIM)": { tag: "owner-bim", bar: "bar-bim", hex: "#9333ea" },
+  "建築師": { tag: "owner-architect", bar: "bar-architect", hex: "#0d9488" },
+  "結構技師": { tag: "owner-structure", bar: "bar-structure", hex: "#4f46e5" },
+  "機電技師": { tag: "owner-mep", bar: "bar-mep", hex: "#ea580c" }
+};
+
+// 格式化日期：將 offsetDay (天數) 轉換為具體日期字串 (YYYY/MM/DD 或 MM/DD)
+function formatOffsetDate(offsetDay, shortFormat = false) {
+  if (!baseDate) {
+    return `D+${offsetDay}`;
+  }
+  const d = new Date(baseDate.getTime());
+  d.setDate(d.getDate() + offsetDay);
+  const y = d.getFullYear();
+  const m = (d.getMonth() + 1).toString().padStart(2, '0');
+  const day = d.getDate().toString().padStart(2, '0');
+  return shortFormat ? `${m}/${day}` : `${y}/${m}/${day}`;
+}
+
+function parseCSV(text) {
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length < 2) return [];
+
+  const headers = parseCSVLine(lines[0]);
+  const result = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
+    const values = parseCSVLine(lines[i]);
+    const obj = {};
+    headers.forEach((h, idx) => {
+      obj[h.trim()] = values[idx] ? values[idx].trim() : "";
+    });
+    result.push(obj);
+  }
+  return result;
+}
+
+function parseCSVLine(line) {
+  const result = [];
+  let cur = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') {
+      inQuotes = !inQuotes;
+    } else if (c === ',' && !inQuotes) {
+      result.push(cur);
+      cur = '';
+    } else {
+      cur += c;
+    }
+  }
+  result.push(cur);
+  return result;
+}
+
+async function fetchWithCORS(url) {
+  const proxies = [
+    url,
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+    `https://corsproxy.io/?${encodeURIComponent(url)}`
+  ];
+
+  for (const pUrl of proxies) {
+    try {
+      const fetchUrl = pUrl.includes('?') ? `${pUrl}&_t=${Date.now()}` : `${pUrl}?_t=${Date.now()}`;
+      const res = await fetch(fetchUrl);
+      if (res.ok) {
+        const text = await res.text();
+        if (text && text.includes("start_day")) {
+          return text;
+        }
+      }
+    } catch (e) {
+      console.warn("Proxy 嘗試失敗:", pUrl, e);
+    }
+  }
+  throw new Error("所有連線通道皆受限");
+}
+
+async function loadDataFromSheets(isManual = false) {
+  const overlay = document.getElementById("loading-overlay");
+  if (isManual) overlay.style.display = "flex";
+
+  try {
+    const csvText = await fetchWithCORS(CSV_URL);
+    const rawData = parseCSV(csvText);
+
+    if (rawData.length > 0) {
+      globalGanttData = rawData.map(r => ({
+        id: r.id || "",
+        name: r.name || "",
+        section: r.section || "",
+        owner: r.owner || "",
+        start: parseInt(r.start_day) || 0,
+        end: parseInt(r.end_day) || 0,
+        duration: parseInt(r.duration) || 0,
+        type: (r.type || "task").toLowerCase(),
+        deps: r.dependencies || "-",
+        deliverable: r.deliverables || ""
+      }));
+
+      const now = new Date();
+      document.getElementById("sync-status-label").innerText = "已與雲端同步";
+    }
+  } catch (err) {
+    console.warn("雲端讀取受限，自動切換至內建資料庫渲染:", err);
+    document.getElementById("sync-status-label").innerText = "本機離線模式";
+    if (isManual) {
+      alert("目前處於瀏覽器本地檔案安全限制環境，已為您自動載入內建 51 項標準專案時程資料。");
+    }
+  } finally {
+    overlay.style.display = "none";
+    updateStats();
+    buildDynamicFilters();
+    renderAll();
+  }
+}
+
+function updateStats() {
+  document.getElementById("stat-total-rows").innerText = `${globalGanttData.length} 項`;
+  const milestones = new Set(globalGanttData.filter(d => d.type === 'milestone').map(d => d.id)).size;
+  document.getElementById("stat-total-milestones").innerText = `${milestones} 次`;
+  document.getElementById("stat-total-deliverables").innerText = `${globalGanttData.length} 份`;
+
+  if (baseDate) {
+    const startDateStr = formatOffsetDate(0);
+    const endDateStr = formatOffsetDate(TOTAL_DAYS);
+    document.getElementById("stat-date-mode").innerText = `${startDateStr} ~ ${endDateStr}`;
+    document.getElementById("timeline-header-title").innerHTML = `時程軸 (${startDateStr} ~ ${endDateStr})<div class="timeline-ruler" id="ruler-container"></div>`;
+  } else {
+    document.getElementById("stat-date-mode").innerText = "相對日模式 (D+0 ~ D+98)";
+    document.getElementById("timeline-header-title").innerHTML = `時程軸 (相對日 D+0 ~ D+98)<div class="timeline-ruler" id="ruler-container"></div>`;
+  }
+}
+
+function buildDynamicFilters() {
+  const owners = Array.from(new Set(globalGanttData.map(d => d.owner).filter(Boolean)));
+  const container = document.getElementById("filter-container");
+  
+  let html = `<span class="filter-label">負責單位篩選：</span>`;
+  html += `<button class="filter-btn ${currentOwnerFilter === 'all' ? 'active' : ''}" data-owner="all">全部單位</button>`;
+  
+  owners.forEach(owner => {
+    const config = ownerClassMap[owner] || { bar: "bar-default" };
+    const isActive = currentOwnerFilter === owner ? 'active' : '';
+    html += `
+      <button class="filter-btn ${isActive}" data-owner="${owner}">
+        <span class="legend-indicator ${config.bar}"></span>${owner}
+      </button>
+    `;
+  });
+  
+  container.innerHTML = html;
+
+  container.querySelectorAll(".filter-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      container.querySelectorAll(".filter-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      currentOwnerFilter = btn.getAttribute("data-owner");
+      renderGantt(currentOwnerFilter);
+    });
+  });
+}
+
+function initRuler() {
+  const ruler = document.getElementById("ruler-container");
+  if (!ruler) return;
+  ruler.innerHTML = "";
+  for (let d = 0; d <= TOTAL_DAYS; d += 7) {
+    const mark = document.createElement("div");
+    mark.className = "ruler-mark";
+    const percent = (d / TOTAL_DAYS) * 100;
+    mark.style.left = `${percent}%`;
+
+    // 依據有無基準日顯示具體日期或 D+X
+    const labelText = baseDate ? formatOffsetDate(d, true) : `D+${d}`;
+    mark.innerHTML = `<span>${labelText}</span>`;
+    ruler.appendChild(mark);
+  }
+}
+
+function renderGantt(filterOwner = "all") {
+  const tbody = document.getElementById("gantt-tbody");
+  tbody.innerHTML = "";
+
+  let currentSection = "";
+
+  globalGanttData.forEach((item, index) => {
+    if (filterOwner !== "all" && item.owner !== filterOwner) return;
+
+    if (item.section !== currentSection) {
+      currentSection = item.section;
+      const secRow = document.createElement("tr");
+      secRow.className = "section-header-row";
+      secRow.innerHTML = `<td colspan="5">${currentSection}</td>`;
+      tbody.appendChild(secRow);
+    }
+
+    const row = document.createElement("tr");
+    row.className = `gantt-row ${item.type === 'milestone' ? 'milestone-row' : ''}`;
+
+    const colorConfig = ownerClassMap[item.owner] || { tag: "owner-default", bar: "bar-default", hex: "#475569" };
+    const leftPercent = (item.start / TOTAL_DAYS) * 100;
+    const widthPercent = (item.duration / TOTAL_DAYS) * 100;
+
+    let timelineHTML = "";
+    if (item.type === "milestone") {
+      const markerLabel = baseDate ? formatOffsetDate(item.start, true) : `D+${item.start}`;
+      timelineHTML = `
+        <div class="milestone-marker ${colorConfig.bar}" 
+             style="left: ${leftPercent}%;" 
+             data-index="${index}"></div>
+        <span class="milestone-label" style="left: calc(${leftPercent}% + 14px); color: ${colorConfig.hex};">
+          ${markerLabel}
+        </span>
+      `;
+    } else {
+      const barText = baseDate 
+        ? `${item.duration}d (${formatOffsetDate(item.start, true)}~${formatOffsetDate(item.end, true)})`
+        : `${item.duration}d (D+${item.start}~D+${item.end})`;
+        
+      timelineHTML = `
+        <div class="task-bar ${colorConfig.bar}" 
+             style="left: ${leftPercent}%; width: ${Math.max(widthPercent, 1.5)}%;"
+             data-index="${index}">
+          ${barText}
+        </div>
+      `;
+    }
+
+    row.innerHTML = `
+      <td class="col-id" style="text-align: center;">
+        <span class="task-id-badge">${item.id}</span>
+      </td>
+      <td class="col-task">
+        <div class="task-title">${item.name}</div>
+      </td>
+      <td class="col-owner">
+        <span class="owner-tag ${colorConfig.tag}">${item.owner}</span>
+      </td>
+      <td class="col-deliverable">
+        <span class="deliverable-text">${item.deliverable}</span>
+      </td>
+      <td class="col-timeline">
+        <div class="timeline-track">
+          ${timelineHTML}
+        </div>
+      </td>
+    `;
+
+    tbody.appendChild(row);
+  });
+
+  bindTooltipEvents();
+}
+
+function bindTooltipEvents() {
+  const tooltip = document.getElementById("tooltip");
+  const interactiveEls = document.querySelectorAll(".task-bar, .milestone-marker");
+
+  interactiveEls.forEach(el => {
+    el.addEventListener("mouseenter", (e) => {
+      const idx = e.target.getAttribute("data-index");
+      const item = globalGanttData[idx];
+
+      let periodStr = "";
+      if (item.type === "milestone") {
+        periodStr = baseDate 
+          ? `${formatOffsetDate(item.start)} (會議日)` 
+          : `D+${item.start} (會議日)`;
+      } else {
+        periodStr = baseDate
+          ? `${formatOffsetDate(item.start)} 至 ${formatOffsetDate(item.end)} (${item.duration} 天)`
+          : `D+${item.start} 至 D+${item.end} (${item.duration} 天)`;
+      }
+
+      document.getElementById("tt-title").innerText = `[${item.id}] ${item.name}`;
+      document.getElementById("tt-section").innerText = item.section;
+      document.getElementById("tt-owner").innerText = item.owner;
+      document.getElementById("tt-period").innerText = periodStr;
+      document.getElementById("tt-deps").innerText = item.deps || "無";
+      document.getElementById("tt-deliverable").innerText = item.deliverable;
+
+      tooltip.style.display = "block";
+    });
+
+    el.addEventListener("mousemove", (e) => {
+      tooltip.style.left = `${e.clientX + 15}px`;
+      tooltip.style.top = `${e.clientY + 15}px`;
+    });
+
+    el.addEventListener("mouseleave", () => {
+      tooltip.style.display = "none";
+    });
+  });
+}
+
+function renderAll() {
+  updateStats();
+  initRuler();
+  renderGantt(currentOwnerFilter);
+}
+
+// 日期變更監聽
+function initDatePicker() {
+  const dateInput = document.getElementById("base-date-input");
+  dateInput.addEventListener("change", (e) => {
+    if (e.target.value) {
+      const [year, month, day] = e.target.value.split("-").map(Number);
+      baseDate = new Date(year, month - 1, day);
+    } else {
+      baseDate = null;
+    }
+    renderAll();
+  });
+}
+
+function clearBaseDate() {
+  document.getElementById("base-date-input").value = "";
+  baseDate = null;
+  renderAll();
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  initDatePicker();
+  renderAll();
+  loadDataFromSheets(false);
+});
+</script>
+
+</body>
+</html>
