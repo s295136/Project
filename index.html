@@ -858,66 +858,168 @@ async function fetchWithCORS(url) {
   throw new Error("所有連線通道皆受限");
 }
 
+// 智慧即時載入 (優先直連 GAS 即時讀取試算表，徹底解決快取延遲與欄位消失問題)
 async function loadDataFromSheets(isManual = false) {
   const overlay = document.getElementById("loading-overlay");
   if (isManual) overlay.style.display = "flex";
 
+  let loadedSuccessfully = false;
+
+  // -------------------------------------------------------------
+  // 1. 優先透過 GAS Web App 取得即時資料 (無快取延遲、欄位最準確)
+  // -------------------------------------------------------------
   try {
-    // 1. 優先向 GAS API 取得 E2 基準日
-    try {
-      const gasRes = await fetch(`${GAS_API_URL}?_t=${Date.now()}`);
-      if (gasRes.ok) {
-        const gasJson = await gasRes.json();
-        if (gasJson && gasJson.baseDate) {
+    const gasRes = await fetch(`${GAS_API_URL}?_t=${Date.now()}`);
+    if (gasRes.ok) {
+      const gasJson = await gasRes.json();
+      
+      if (gasJson && gasJson.status === "success") {
+        // 設定基準日 E2
+        if (gasJson.baseDate) {
           const parsed = parseDateString(gasJson.baseDate);
           if (parsed) {
             baseDate = parsed;
             document.getElementById("base-date-input").value = formatDateToYMD(parsed);
           }
         }
-      }
-    } catch (gasErr) {
-      console.warn("讀取 GAS API 基準日失敗:", gasErr);
-    }
 
-    // 2. 讀取 CSV
-    const csvText = await fetchWithCORS(CSV_URL);
-    const parsedObj = Papa.parse(csvText, { header: true, skipEmptyLines: true });
-    const rawData = parsedObj.data;
+        // 若 GAS 有回傳完整的試算表列資料
+        if (gasJson.data && Array.isArray(gasJson.data) && gasJson.data.length > 0) {
+          globalGanttData = gasJson.data.map(r => {
+            let sDay = 0;
+            let eDay = 0;
+            let dur = parseInt(r.duration, 10) || 0;
 
-    if (rawData && rawData.length > 0) {
-      const firstRowDate = parseDateString(rawData[0].start_day);
-      if (firstRowDate && !baseDate) {
-        baseDate = firstRowDate;
-        document.getElementById("base-date-input").value = formatDateToYMD(firstRowDate);
-      }
+            const rowStartDate = parseDateString(r.start_day);
+            const rowEndDate = parseDateString(r.end_day);
 
-      globalGanttData = rawData.map((r) => {
-        let sDay = 0;
-        let eDay = 0;
-        let dur = parseInt(r.duration, 10);
-        if (isNaN(dur)) dur = 0;
+            if (rowStartDate && baseDate) {
+              const diffTime = rowStartDate.getTime() - baseDate.getTime();
+              sDay = Math.round(diffTime / (1000 * 60 * 60 * 24));
+              if (isNaN(sDay) || sDay < 0) sDay = 0;
 
-        const rowStartDate = parseDateString(r.start_day);
-        const rowEndDate = parseDateString(r.end_day);
+              if (rowEndDate) {
+                const diffEndTime = rowEndDate.getTime() - baseDate.getTime();
+                eDay = Math.round(diffEndTime / (1000 * 60 * 60 * 24));
+              } else {
+                eDay = sDay + dur;
+              }
+            } else {
+              sDay = parseInt(r.start_day, 10) || 0;
+              eDay = parseInt(r.end_day, 10) || (sDay + dur);
+            }
 
-        if (rowStartDate && baseDate) {
-          const diffTime = rowStartDate.getTime() - baseDate.getTime();
-          sDay = Math.round(diffTime / (1000 * 60 * 60 * 24));
-          if (isNaN(sDay) || sDay < 0) sDay = 0;
+            return {
+              id: (r.id || "").trim(),
+              name: (r.name || "").trim(),
+              section: (r.section || "").trim(),
+              owner: (r.owner || "").trim(),
+              start: sDay,
+              end: eDay,
+              duration: dur,
+              type: (r.type || "task").trim().toLowerCase(),
+              deps: (r.dependencies || "-").trim(),
+              deliverable: (r.deliverables || "").trim(),
+              actualFinish: r.actualFinish || "",
+              delayDays: (r.delayDays !== null && r.delayDays !== undefined) ? r.delayDays : null
+            };
+          });
 
-          if (rowEndDate) {
-            const diffEndTime = rowEndDate.getTime() - baseDate.getTime();
-            eDay = Math.round(diffEndTime / (1000 * 60 * 60 * 24));
-          } else {
-            eDay = sDay + dur;
-          }
-        } else {
-          sDay = parseInt(r.start_day, 10);
-          if (isNaN(sDay)) sDay = 0;
-          eDay = parseInt(r.end_day, 10);
-          if (isNaN(eDay)) eDay = sDay + dur;
+          loadedSuccessfully = true;
+          document.getElementById("sync-status-label").innerText = "已與雲端即時同步";
         }
+      }
+    }
+  } catch (gasErr) {
+    console.warn("GAS 直連失敗，嘗試切換至 CSV 通道:", gasErr);
+  }
+
+  // -------------------------------------------------------------
+  // 2. 備援通道：若 GAS 未回傳陣列，則讀取 CSV
+  // -------------------------------------------------------------
+  if (!loadedSuccessfully) {
+    try {
+      const csvText = await fetchWithCORS(CSV_URL);
+      const parsedObj = Papa.parse(csvText, { header: false, skipEmptyLines: true });
+      const rows = parsedObj.data;
+
+      if (rows && rows.length > 1) {
+        const headerRow = rows[0].map(h => (h || "").toString().replace(/[\r\n\s]+/g, " ").trim().toLowerCase());
+        
+        let afIdx = 10; // 預設 K 欄 (0-based: 10)
+        let delayIdx = 11; // 預設 L 欄 (0-based: 11)
+
+        headerRow.forEach((h, idx) => {
+          if (h.includes("actual") || h.includes("af") || h.includes("實際")) afIdx = idx;
+          if (h.includes("delay") || h.includes("落後")) delayIdx = idx;
+        });
+
+        const dataRows = rows.slice(1);
+        if (!baseDate && dataRows[0][4]) {
+          const firstRowDate = parseDateString(dataRows[0][4]);
+          if (firstRowDate) {
+            baseDate = firstRowDate;
+            document.getElementById("base-date-input").value = formatDateToYMD(firstRowDate);
+          }
+        }
+
+        globalGanttData = dataRows.map(r => {
+          let dur = parseInt(r[6], 10) || 0;
+          let sDay = 0;
+          let eDay = 0;
+          const rowStartDate = parseDateString(r[4]);
+          const rowEndDate = parseDateString(r[5]);
+
+          if (rowStartDate && baseDate) {
+            sDay = Math.round((rowStartDate.getTime() - baseDate.getTime()) / (1000 * 60 * 60 * 24));
+            if (isNaN(sDay) || sDay < 0) sDay = 0;
+            eDay = rowEndDate ? Math.round((rowEndDate.getTime() - baseDate.getTime()) / (1000 * 60 * 60 * 24)) : sDay + dur;
+          } else {
+            sDay = parseInt(r[4], 10) || 0;
+            eDay = parseInt(r[5], 10) || (sDay + dur);
+          }
+
+          const rawAF = (r[afIdx] || "").toString().trim();
+          const parsedAF = parseDateString(rawAF);
+          const actualFinishVal = parsedAF ? formatDateToYMD(parsedAF) : (rawAF.length >= 8 ? rawAF : "");
+
+          const rawDelay = (r[delayIdx] || "").toString().trim();
+          let delayNum = null;
+          if (rawDelay !== "") {
+            const parsedD = parseFloat(rawDelay.replace(/[^\d.-]/g, ""));
+            if (!isNaN(parsedD)) delayNum = parsedD;
+          }
+
+          return {
+            id: (r[0] || "").toString().trim(),
+            name: (r[1] || "").toString().trim(),
+            section: (r[2] || "").toString().trim(),
+            owner: (r[3] || "").toString().trim(),
+            start: sDay,
+            end: eDay,
+            duration: dur,
+            type: (r[7] || "task").toString().trim().toLowerCase(),
+            deps: (r[8] || "-").toString().trim(),
+            deliverable: (r[9] || "").toString().trim(),
+            actualFinish: actualFinishVal,
+            delayDays: delayNum
+          };
+        });
+
+        loadedSuccessfully = true;
+        document.getElementById("sync-status-label").innerText = "已與雲端同步 (CSV)";
+      }
+    } catch (csvErr) {
+      console.warn("CSV 讀取受限，保留本地資料:", csvErr);
+      document.getElementById("sync-status-label").innerText = "本機離線模式";
+    }
+  }
+
+  overlay.style.display = "none";
+  updateStats();
+  buildDynamicFilters();
+  renderAll();
+}
 
         const typeClean = (r.type || "task").trim().toLowerCase().replace(/['"]/g, "");
 
